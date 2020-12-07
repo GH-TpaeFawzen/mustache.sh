@@ -4,7 +4,11 @@ set -e
 
 # File descriptor 3 is commandeered for debug output, which may end up being
 # forwarded to standard error.
-[ -z "$MUSTACHE_DEBUG" ] && exec 3>/dev/null || exec 3>&2
+case "$MUSTACHE_DEBUG" in ('')
+	exec 3>/dev/null
+;;(*)
+	exec 3>&2
+esac
 
 # File descriptor 4 is commandeered for use as a sink for literal and
 # variable output of (inverted) sections that are not destined for standard
@@ -64,22 +68,21 @@ _mustache() {
 			# on by the "tag" state).  If this is the first opening
 			# brace, wait and see.  Otherwise, emit this character.
 			"literal")
-				if [ -z "$_M_PREV_C" ]
-				then
+				case "$_M_PREV_C" in '')
 					case "$_M_C" in
 						"{") ;;
 						"") echo;;
 						*) printf "%s" "$_M_C";;
 					esac
-				else
+				;; *)
 					case "$_M_PREV_C$_M_C" in
 						"{{") _M_STATE="tag" _M_TAG="";;
 						?"{") ;;
 						*)
-							[ "$_M_PREV_C" = "{" ] && printf "%s" "{"
-							[ -z "$_M_C" ] && echo || printf "%s" "$_M_C";;
+							case "$_M_PREV_C" in ("{") printf "%s" "{"; esac
+							case "$_M_C" in ('') echo;; (*) printf "%s" "$_M_C"; esac;;
 					esac
-				fi >&$_M_FD;;
+				esac >&$_M_FD;; ### XXX! What kind of Bashism?
 
 			# Consume the tag type and tag.
 			"tag")
@@ -92,17 +95,16 @@ _mustache() {
 					"{{") printf "{" >&$_M_FD;;
 
 					# Note the type of this tag, defaulting to "variable".
-					"{#"|"{^"|"{/"|"{!"|"{>") _M_TAG_TYPE="$_M_C" _M_TAG="";;
+					"{"[#^/!>]) _M_TAG_TYPE="$_M_C" _M_TAG="";;
 
 					# A variable tag must note the first character of the
 					# variable name.  Since it's possible that an opening
 					# brace comes in the middle of the tag, check that
 					# this is indeed the beginning of the tag.
 					"{"?)
-						if [ -z "$_M_TAG" ]
-						then
+						case "$_M_TAG" in ('')
 							_M_TAG_TYPE="variable" _M_TAG="$_M_C"
-						fi;;
+						esac;;
 
 					# Two closing braces in a row closes the tag.  The
 					# state resets to "literal" and the tag is processed,
@@ -138,10 +140,10 @@ _mustache_cat() {
 	cat -A <"/dev/null" >"/dev/null" 2>&1
     _M_STATUS="$?"
 	set -e
-	if [ "$_M_STATUS" -eq 1 ]
-    then cat -e
-	else cat -A
-	fi
+	case "$_M_STATUS" in (1)
+    cat -e
+	;;(*) cat -A
+	esac
 }
 
 # Execute a tag surrounded by backticks.  Remove the backticks first.
